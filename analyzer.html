@@ -1,0 +1,678 @@
+<title>Nuts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700&display=swap">
+<style>
+/* 版式：两份样本并排摆在灯箱上，各自挂着判定读数；下面是测量表、逐句检查和准确率 */
+:root {
+  --bg: #F4F6F9;
+  --panel: #FFFFFF;
+  --ink: #18202C;
+  --muted: #5B6575;
+  --rule: #D8DEE7;
+  --accent: #2550C8;
+  --ai: #B3245A;
+  --ai-soft: #F9E3EB;
+  --ai-faint: #FCF1F5;
+  --warn: #965800;
+  --warn-soft: #FBEFD9;
+  --ok: #1B7350;
+  --ok-soft: #E2F3EA;
+  --font-display: "Noto Serif SC", "Songti SC", STSong, serif;
+  --font-body: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10141A; --panel: #171C24; --ink: #E4E8EF; --muted: #97A1B1; --rule: #2A313C; --accent: #8AA8FF;
+    --ai: #F27DA6; --ai-soft: #3B1E2A; --ai-faint: #2A1A21; --warn: #E8A84A; --warn-soft: #3A2C14;
+    --ok: #5DC79B; --ok-soft: #173327;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10141A; --panel: #171C24; --ink: #E4E8EF; --muted: #97A1B1; --rule: #2A313C; --accent: #8AA8FF;
+  --ai: #F27DA6; --ai-soft: #3B1E2A; --ai-faint: #2A1A21; --warn: #E8A84A; --warn-soft: #3A2C14;
+  --ok: #5DC79B; --ok-soft: #173327;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.65 var(--font-body); }
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 40px;
+}
+section { display: grid; gap: 12px; min-width: 0; }
+
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+h1 { margin: 0; font: 700 clamp(30px, 5vw, 40px)/1.1 var(--font-display); letter-spacing: 0.01em; }
+h2 { margin: 0; font: 700 20px/1.3 var(--font-display); text-wrap: balance; }
+.lede { margin: 8px 0 0; max-width: 42em; color: var(--muted); }
+.status {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 12px; border: 1px solid var(--rule); border-radius: 999px;
+  background: var(--panel); color: var(--muted); font-size: 13px;
+}
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.status[data-state="ok"] { color: var(--ok); }
+.status[data-state="ok"]::before { background: var(--ok); }
+
+.specimens { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.specimen {
+  min-width: 0; display: grid; gap: 10px; align-content: start;
+  padding: 14px 16px 16px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel);
+}
+.specimen-head { display: flex; align-items: center; gap: 10px; }
+.tag {
+  flex: none; width: 26px; height: 26px; display: grid; place-items: center;
+  border-radius: 6px; background: var(--ink); color: var(--panel); font: 500 13px var(--font-data);
+}
+.name {
+  flex: 1; min-width: 0; padding: 2px 6px;
+  border: 1px solid transparent; border-radius: 4px; background: transparent;
+  color: var(--ink); font: 500 15px var(--font-body);
+}
+.name:hover { border-color: var(--rule); }
+.count { color: var(--muted); font: 12px var(--font-data); white-space: nowrap; }
+textarea {
+  width: 100%; min-height: 220px; resize: vertical; padding: 10px 12px;
+  border: 1px solid var(--rule); border-radius: 6px; background: var(--bg);
+  color: var(--ink); font: 14px/1.6 var(--font-body);
+}
+.specimen-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.optional { color: var(--muted); font-size: 12px; }
+
+.verdict { display: grid; gap: 6px; padding: 12px 14px; border-radius: 6px; background: var(--bg); }
+.verdict-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.verdict-label { font-weight: 700; }
+.verdict-prob { color: var(--muted); font: 500 13px var(--font-data); font-variant-numeric: tabular-nums; }
+.verdict[data-verdict="likely"] .verdict-label { color: var(--ai); }
+.verdict[data-verdict="possible"] .verdict-label { color: var(--warn); }
+.verdict[data-verdict="unlikely"] .verdict-label { color: var(--ok); }
+.meter { position: relative; height: 8px; border-radius: 4px; background: var(--rule); overflow: hidden; }
+.meter .fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--muted); }
+.verdict[data-verdict="likely"] .fill { background: var(--ai); }
+.verdict[data-verdict="possible"] .fill { background: var(--warn); }
+.verdict[data-verdict="unlikely"] .fill { background: var(--ok); }
+.meter .tick { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--panel); }
+.verdict-note { margin: 0; color: var(--muted); font-size: 12px; }
+
+.btn {
+  position: relative; padding: 5px 12px; cursor: pointer;
+  border: 1px solid var(--rule); border-radius: 6px; background: transparent;
+  color: var(--accent); font: 500 13px var(--font-body);
+}
+.btn:hover { border-color: var(--accent); }
+.name:focus-visible, textarea:focus-visible, .btn:focus-visible, .btn:focus-within {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.summary { margin: 0; color: var(--muted); }
+.summary strong { color: var(--ai); font-weight: 500; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); }
+table { width: 100%; min-width: 460px; border-collapse: collapse; }
+th, td { padding: 10px 16px; border-top: 1px solid var(--rule); text-align: left; vertical-align: top; }
+thead th { border-top: 0; color: var(--muted); font: 500 12px var(--font-body); letter-spacing: 0.06em; }
+.num { text-align: right; font: 500 14px var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+thead .num { font: 500 12px var(--font-body); white-space: normal; }
+.metric { font-weight: 500; }
+.hint { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
+.group th { padding-block: 6px; background: var(--bg); color: var(--muted); font: 500 12px var(--font-body); letter-spacing: 0.08em; }
+.lean {
+  display: inline-block; margin-right: 8px; padding: 0 8px; border-radius: 999px;
+  background: var(--ai-soft); color: var(--ai); font: 500 11px/1.7 var(--font-body); vertical-align: 1px;
+}
+.pending, .note { color: var(--muted); font-weight: 400; }
+.note { font-size: 13px; }
+code { padding: 1px 5px; border: 1px solid var(--rule); border-radius: 4px; background: var(--bg); font: 12px var(--font-data); }
+
+.seg { display: inline-flex; max-width: 100%; overflow: hidden; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); }
+.seg button {
+  min-width: 0; max-width: 16em; padding: 5px 12px; border: 0; cursor: pointer;
+  background: transparent; color: var(--muted); font: 500 13px var(--font-body);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; color: var(--muted); font-size: 12px; }
+.swatch { display: inline-block; width: 14px; height: 14px; margin-right: 6px; border: 1px solid var(--rule); border-radius: 3px; vertical-align: -2px; }
+.swatch.lv1 { background: var(--ai-faint); }
+.swatch.lv2 { background: var(--ai-soft); }
+.inspect-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; align-items: start; }
+.prose {
+  min-width: 0; padding: 16px 18px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel);
+  white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.9;
+}
+.s { padding: 2px 0; border-radius: 3px; cursor: pointer; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.s.lv1 { background: var(--ai-faint); }
+.s.lv2 { background: var(--ai-soft); }
+.s:hover { box-shadow: 0 0 0 1px var(--ai); }
+.phrase { text-decoration: underline wavy var(--ai); text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.flagged { min-width: 0; margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.flag {
+  width: 100%; display: grid; gap: 4px; padding: 10px 14px; cursor: pointer; text-align: left;
+  border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); color: var(--ink); font: 14px/1.6 var(--font-body);
+}
+.flag:hover { border-color: var(--ai); }
+.flag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.flag-why { color: var(--muted); font-size: 12px; }
+.level { justify-self: start; padding: 0 8px; border-radius: 999px; color: var(--ai); font: 500 11px/1.7 var(--font-body); }
+.level.lv1 { background: var(--ai-faint); }
+.level.lv2 { background: var(--ai-soft); }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .stats { grid-template-columns: minmax(0, 1fr); } }
+.stat { display: grid; gap: 2px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); }
+.stat-value { font: 500 28px/1.2 var(--font-data); font-variant-numeric: tabular-nums; }
+.stat-label { font-weight: 500; }
+.stat-note { color: var(--muted); font-size: 12px; }
+.stat[data-kind="fpr"] .stat-value { color: var(--warn); }
+.stat[data-kind="tpr"] .stat-value { color: var(--ok); }
+
+.guide dl { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px 32px; }
+.guide dt { font-weight: 500; }
+.guide dd { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+.caveat { margin: 0; max-width: 46em; color: var(--muted); font-size: 14px; }
+.caveat strong { color: var(--ink); font-weight: 500; }
+</style>
+
+<div class="page">
+  <header>
+    <div>
+      <h1>Nuts</h1>
+      <p class="lede">英文文本的 AI 特征分析器。粘贴一段文字，看它在 AI 检测器关注的特征上是什么样子；放两段可以对比。</p>
+    </div>
+    <span class="status" id="status" data-state="checking">正在检查本地 GPT-2…</span>
+  </header>
+
+  <section class="specimens" aria-label="待分析的文本">
+    <div class="specimen">
+      <div class="specimen-head">
+        <span class="tag">A</span>
+        <input class="name" id="nameA" value="样例：口语风格" aria-label="文本 A 的名称">
+        <span class="count" id="countA"></span>
+      </div>
+      <textarea id="textA" spellcheck="false" aria-label="文本 A">I didn't really like online classes at first. The wifi in my hostel kept dropping, and half the time I couldn't hear the lecturer at all. But after a few weeks? Honestly it grew on me. I started watching the recordings at night, pausing whenever the slides went too fast, and I actually took better notes than I ever did in the lecture hall.
+
+Being able to rewatch recordings saved me before finals. Still, I miss the random chats after class, the ones where someone asks a dumb question and it turns out everyone was wondering the same thing. You don't get that on Zoom.</textarea>
+      <div class="specimen-foot">
+        <label class="btn">导入 .txt<input type="file" id="fileA" accept=".txt,text/plain" class="visually-hidden"></label>
+      </div>
+      <div class="verdict" id="verdictA" aria-live="polite"></div>
+    </div>
+
+    <div class="specimen">
+      <div class="specimen-head">
+        <span class="tag">B</span>
+        <input class="name" id="nameB" value="样例：AI 腔" aria-label="文本 B 的名称">
+        <span class="count" id="countB"></span>
+      </div>
+      <textarea id="textB" spellcheck="false" aria-label="文本 B">In today's fast-paced world, technology plays a crucial role in education. It is important to note that digital tools foster collaboration among students. Moreover, they provide a seamless learning experience that adapts to individual needs and learning styles.
+
+Furthermore, online platforms leverage data to create a holistic view of student progress. This multifaceted approach underscores the pivotal importance of innovation in modern classrooms. Additionally, educators can use these insights to tailor their teaching strategies. In conclusion, technology is a testament to human progress and will continue to shape the future of learning.</textarea>
+      <div class="specimen-foot">
+        <label class="btn">导入 .txt<input type="file" id="fileB" accept=".txt,text/plain" class="visually-hidden"></label>
+        <span class="optional">B 是可选的，只分析一段时可以清空</span>
+      </div>
+      <div class="verdict" id="verdictB" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="results-title">
+    <div class="section-head">
+      <h2 id="results-title">测量结果</h2>
+      <button class="btn" id="copy" type="button">复制结果表</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th scope="col">指标</th><th scope="col" class="num" id="headA">A</th><th scope="col" class="num" id="headB">B</th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="note">“区分力”是这项指标单独区分人写和 AI 文本的能力（AUROC，0.5 等于瞎猜，1 是完美），在 RAID 测试集上测得。区分力低于 0.6 的指标只作参考，不标“偏 AI”。</p>
+  </section>
+
+  <section aria-labelledby="inspect-title">
+    <div class="section-head">
+      <h2 id="inspect-title">逐句检查</h2>
+      <div class="seg" role="group" aria-label="选择要检查的文本">
+        <button type="button" id="pickA" aria-pressed="false">A</button>
+        <button type="button" id="pickB" aria-pressed="true">B</button>
+      </div>
+    </div>
+    <p class="summary" id="inspectSummary"></p>
+    <div class="legend">
+      <span><span class="swatch lv2"></span>很像 AI</span>
+      <span><span class="swatch lv1"></span>有点像</span>
+      <span><span class="phrase">波浪线</span>：AI 套话</span>
+    </div>
+    <div class="inspect-grid">
+      <div class="prose" id="prose"></div>
+      <ol class="flagged" id="flagged" aria-label="最像 AI 的句子"></ol>
+    </div>
+    <p class="caveat" id="sentenceCaveat"></p>
+  </section>
+
+  <section aria-labelledby="accuracy-title">
+    <h2 id="accuracy-title">准确率</h2>
+    <div class="stats" id="stats"></div>
+    <p class="caveat" id="accuracyNote"></p>
+  </section>
+
+  <section class="guide" aria-labelledby="guide-title">
+    <h2 id="guide-title">怎么读这些数字</h2>
+    <dl>
+      <div><dt>AI 可能性</dt><dd>把下面各项指标交给一个逻辑回归模型综合判断，模型用 RAID 数据集里的人写和 AI 文本训练。</dd></div>
+      <div><dt>困惑度</dt><dd>GPT-2 读这段文字时有多意外。数值越低，说明每个词越好猜。</dd></div>
+      <div><dt>句困惑度波动</dt><dd>每句困惑度的标准差。人写的有的句子好猜、有的难猜，AI 写的更平。</dd></div>
+      <div><dt>Top-10 占比</dt><dd>有多少词正好落在 GPT-2 预测的前 10 名里，这是 GLTR 研究用的方法。</dd></div>
+      <div><dt>突发性（句长 CV）</dt><dd>句子长度的标准差除以平均值。人写的文字长短句交错，数值偏高。</dd></div>
+      <div><dt>AI 套话 / 千词</dt><dd>每一千个词里出现多少 AI 文本明显更常用的短语。套话表是从训练数据统计出来的，不是凭印象列的。</dd></div>
+      <div><dt>词汇多样性（MATTR）</dt><dd>每 50 个词里有多少不重复的词，取滑动平均，长文短文可以直接比较。</dd></div>
+      <div><dt>平均词长</dt><dd>每个词的平均字母数。AI 文本常用更长、更正式的词。</dd></div>
+    </dl>
+    <p class="caveat"><strong>这些都是统计倾向，不是判决。</strong>Nuts 不是 Turnitin 或 GPTZero，两边结果不能互换。非母语写作者，以及实验报告、摘要这类格式固定的文体，更容易被误判。目前只支持英文文本。</p>
+  </section>
+</div>
+
+<script src="nuts-core.js"></script>
+<script>
+const SIDES = ["A", "B"];
+const $ = (id) => document.getElementById(id);
+const Core = window.NutsCore;
+const state = {
+  A: { rule: null, lm: { status: "idle" }, seq: 0 },
+  B: { rule: null, lm: { status: "idle" }, seq: 0 },
+};
+const timers = {};
+let model = null;          // model.json：套话表、综合模型、阈值、评测结果
+let modelError = "";
+let lmAvailable = null;    // null 表示还在检查
+let inspectSide = "B";     // 逐句检查当前看的是哪一段
+
+const METRICS = [
+  { key: "words", label: "词数", d: 0 },
+  { key: "sentences", label: "句数", d: 0 },
+  { key: "mean_len", label: "平均句长", d: 1 },
+  { key: "burst", label: "突发性（句长 CV）", d: 2 },
+  { key: "mattr", label: "词汇多样性（MATTR）", d: 2 },
+  { key: "avg_word_len", label: "平均词长", d: 2 },
+  { key: "phrases_per_1k", label: "AI 套话 / 千词", d: 1 },
+  { key: "commas_per_sentence", label: "逗号 / 句", d: 2 },
+  { key: "para_cv", label: "段落长度 CV", d: 2, layout: true },
+  { key: "ppl", label: "困惑度", d: 1, lm: true },
+  { key: "sent_ppl_std", label: "句困惑度波动", d: 1, lm: true },
+  { key: "top10", label: "Top-10 占比", d: 2, lm: true },
+];
+const VERDICTS = { likely: "很可能是 AI", possible: "可能有 AI 成分", unlikely: "不太像 AI", too_short: "不下结论" };
+const LEVEL_NAMES = ["", "有点像", "很像 AI"];
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const isNum = (v) => typeof v === "number" && isFinite(v);
+const fmt = (v, d) => (isNum(v) ? v.toFixed(d) : "—");
+const pct = (p) => (p < 0.01 ? "<1%" : p > 0.99 ? ">99%" : `${Math.round(p * 100)}%`);
+const names = () => ({ A: $("nameA").value.trim() || "A", B: $("nameB").value.trim() || "B" });
+
+// 字母里超过三成不是英文字母时，认为不是英文
+function looksNonEnglish(text) {
+  const letters = text.match(/\p{L}/gu) || [];
+  return letters.length > 0 && letters.filter((c) => c > "\x7f").length / letters.length > 0.3;
+}
+
+// GPT-2 结果要和当前文本的切句对得上才用
+function lmFor(side) {
+  const lm = state[side].lm, rule = state[side].rule;
+  return lmAvailable && lm.status === "ok" && rule && lm.data.sentences.length === rule.sentence_details.length ? lm.data : null;
+}
+
+function docResult(side) {
+  const rule = state[side].rule;
+  if (!model || !rule) return null;
+  const lm = lmFor(side);
+  const variant = lm ? "full" : "rules";
+  const m = model.doc[variant];
+  const prob = Core.probability(m, Core.docValues(rule, lm ? lm.metrics : null));
+  return { prob, verdict: Core.docVerdict(m, prob, rule.words), variant, m };
+}
+
+function valueOf(side, metric) {
+  if (!metric.lm) return state[side].rule?.[metric.key];
+  return lmFor(side)?.metrics[metric.key];
+}
+
+// ---------- 判定读数 ----------
+function renderVerdict(side) {
+  const el = $("verdict" + side);
+  if (!model) {
+    el.dataset.verdict = "";
+    el.innerHTML = `<p class="verdict-note">${esc(modelError || "正在加载模型…")}</p>`;
+    return;
+  }
+  const res = docResult(side);
+  if (!res) {
+    el.dataset.verdict = "";
+    el.innerHTML = '<p class="verdict-note">粘贴或导入一段英文文本，这里会显示综合判断。</p>';
+    return;
+  }
+  const text = $("text" + side).value;
+  const words = state[side].rule.words;
+  const t = res.m.thresholds;
+  // 不下结论时也不显示概率，免得被当成结论
+  if (looksNonEnglish(text) || res.verdict === "too_short") {
+    el.dataset.verdict = "too_short";
+    el.innerHTML = `<div class="verdict-row"><span class="verdict-label">${VERDICTS.too_short}</span></div>`
+      + `<p class="verdict-note">${looksNonEnglish(text) ? "这段文字看起来不是英文。Nuts 只支持英文。"
+        : `只有 ${words} 个词。少于 ${model.min_words} 个词时结果不可靠。`}</p>`;
+    return;
+  }
+  const waiting = lmAvailable && state[side].lm.status === "loading";
+  const note = (res.variant === "full" ? "依据：规则指标 + GPT-2。"
+    : waiting ? "依据：暂时只用规则指标，GPT-2 正在计算，结果可能会变。" : "依据：只用规则指标（没有 GPT-2，准确率较低）。")
+    + " 刻度线是“可能”和“很可能”的分界。";
+  el.dataset.verdict = res.verdict;
+  el.innerHTML = `<div class="verdict-row"><span class="verdict-label">${VERDICTS[res.verdict]}</span>`
+    + `<span class="verdict-prob">AI 可能性 ${pct(res.prob)}</span></div>`
+    + `<div class="meter" role="img" aria-label="AI 可能性 ${pct(res.prob)}"><span class="fill" style="width:${(res.prob * 100).toFixed(1)}%"></span>`
+    + `<span class="tick" style="left:${(t.possible * 100).toFixed(1)}%"></span><span class="tick" style="left:${(t.likely * 100).toFixed(1)}%"></span></div>`
+    + `<p class="verdict-note">${esc(note)}</p>`;
+}
+
+// ---------- 测量表 ----------
+function aiSide(metric) {
+  const info = model?.feature_auc?.[metric.key];
+  if (!info || info.auc < 0.6 || metric.layout) return null;
+  const [a, b] = SIDES.map((s) => valueOf(s, metric));
+  if (!isNum(a) || !isNum(b)) return null;
+  const ra = Number(a.toFixed(metric.d)), rb = Number(b.toFixed(metric.d));
+  if (ra === rb) return null;
+  return (info.higher_is_ai ? ra > rb : ra < rb) ? "A" : "B";
+}
+
+function cell(side, metric, lean) {
+  if (metric.lm) {
+    const lm = state[side].lm;
+    if (lm.status === "loading") return '<span class="pending">计算中…</span>';
+    if (lm.status === "error") return `<span class="pending" title="${esc(lm.error)}">出错</span>`;
+  }
+  return (lean ? '<span class="lean">偏 AI</span>' : "") + fmt(valueOf(side, metric), metric.d);
+}
+
+function hintFor(metric) {
+  if (metric.layout) return "主要反映排版习惯，只作参考";
+  const info = model?.feature_auc?.[metric.key];
+  if (!info) return "";
+  if (info.auc < 0.6) return `区分力弱（${info.auc.toFixed(2)}）`;
+  return `${info.higher_is_ai ? "越高越像 AI" : "越低越像 AI"} · 区分力 ${info.auc.toFixed(2)}`;
+}
+
+function renderTable() {
+  const n = names();
+  $("headA").textContent = n.A;
+  $("headB").textContent = n.B;
+  let rows = "";
+  for (const group of ["rule", "lm"]) {
+    rows += `<tr class="group"><th colspan="3" scope="colgroup">${group === "rule" ? "规则指标" : "语言模型指标（GPT-2）"}</th></tr>`;
+    if (group === "lm" && !lmAvailable) {
+      rows += `<tr><td colspan="3" class="note">${lmAvailable === null
+        ? "正在检查本地 GPT-2…"
+        : "困惑度类指标需要在本机运行 GPT-2：在项目文件夹运行 <code>server.py</code>（命令见 README），然后在它打开的网页里分析。"}</td></tr>`;
+      continue;
+    }
+    for (const metric of METRICS.filter((x) => !!x.lm === (group === "lm"))) {
+      const side = aiSide(metric);
+      const hint = hintFor(metric);
+      rows += `<tr><th scope="row" class="metric">${esc(metric.label)}${hint ? `<span class="hint">${esc(hint)}</span>` : ""}</th>`
+        + SIDES.map((s) => `<td class="num">${cell(s, metric, side === s)}</td>`).join("") + "</tr>";
+    }
+  }
+  $("rows").innerHTML = rows;
+}
+
+// ---------- 逐句检查 ----------
+// 每个特征把这句往 AI 方向推了多少，挑最明显的几条当作理由
+const REASONS = {
+  log_ppl: (s, lm, high) => `困惑度${high ? "高" : "低"}（${lm.ppl.toFixed(1)}）`,
+  top10: (s, lm, high) => `可预测的词${high ? "多" : "少"}（${Math.round(lm.top10 * 100)}% 在 GPT-2 前 10 名）`,
+  log_hits: (s) => `套话：${s.hits.map((h) => h[0]).join("、")}`,
+  log_words: (s, lm, high) => `句子较${high ? "长" : "短"}（${s.words} 词）`,
+  avg_word_len: (s, lm, high) => `用词偏${high ? "长" : "短"}（平均 ${s.avg_word_len.toFixed(1)} 个字母）`,
+  commas: (s, lm, high) => `逗号较${high ? "多" : "少"}（${s.commas} 个）`,
+};
+
+function sentenceResults(side) {
+  const rule = state[side].rule;
+  if (!model || !rule) return null;
+  const lm = lmFor(side);
+  const m = model.sentence[lm ? "full" : "rules"];
+  return rule.sentence_details.map((s, i) => {
+    const lmS = lm ? lm.sentences[i] : null;
+    const values = Core.sentenceValues(s, lmS);
+    const prob = Core.probability(m, values);
+    const reasons = [];
+    m.features.forEach((f, k) => {
+      const x = values[f];
+      if (x === null || x === undefined) return;
+      const push = m.coef[k] * (x - m.mean[k]) / m.scale[k];
+      if (push > 0.25 && (f !== "log_hits" || s.hits.length)) reasons.push([push, REASONS[f](s, lmS, x > m.mean[k])]);
+    });
+    reasons.sort((a, b) => b[0] - a[0]);
+    return { ...s, prob, level: s.words >= 3 ? Core.sentenceLevel(m, prob) : 0, reasons: reasons.slice(0, 3).map((r) => r[1]) };
+  });
+}
+
+function markPhrases(text, s) {
+  let html = "", pos = s.start;
+  for (const [, a, b] of s.hits) {
+    if (a < pos) continue;
+    html += esc(text.slice(pos, a)) + `<span class="phrase">${esc(text.slice(a, b))}</span>`;
+    pos = b;
+  }
+  return html + esc(text.slice(pos, s.end));
+}
+
+function renderInspector() {
+  const n = names();
+  for (const s of SIDES) {
+    $("pick" + s).textContent = `${s} · ${n[s]}`;
+    $("pick" + s).setAttribute("aria-pressed", String(s === inspectSide));
+  }
+  const text = $("text" + inspectSide).value;
+  const sentences = sentenceResults(inspectSide);
+  if (!sentences || !sentences.length) {
+    $("inspectSummary").textContent = model ? "这段文本是空的。" : modelError || "正在加载模型…";
+    $("prose").textContent = "";
+    $("flagged").innerHTML = "";
+    return;
+  }
+
+  // 原文高亮：normalize() 不改变长度，位置可以直接用在原文上
+  let html = "", pos = 0;
+  for (const s of sentences) {
+    const why = s.reasons.join(" · ");
+    html += esc(text.slice(pos, s.start))
+      + `<span class="s${s.level ? " lv" + s.level : ""}" data-start="${s.start}" data-end="${s.end}"${why ? ` title="${esc(why)}"` : ""}>${markPhrases(text, s)}</span>`;
+    pos = s.end;
+  }
+  $("prose").innerHTML = html + esc(text.slice(pos));
+
+  const flagged = sentences.filter((s) => s.level).sort((a, b) => b.prob - a.prob);
+  const shown = flagged.slice(0, 10);
+  $("flagged").innerHTML = flagged.length
+    ? shown.map((s) => `<li><button type="button" class="flag" data-start="${s.start}" data-end="${s.end}">`
+        + `<span class="level lv${s.level}">${LEVEL_NAMES[s.level]} · ${pct(s.prob)}</span><span>${esc(text.slice(s.start, s.end))}</span>`
+        + (s.reasons.length ? `<span class="flag-why">${esc(s.reasons.join(" · "))}</span>` : "") + "</button></li>").join("")
+      + (flagged.length > shown.length ? `<li class="note">还有 ${flagged.length - shown.length} 句，原文里已经标出。</li>` : "")
+    : '<li class="note">没有明显像 AI 的句子。</li>';
+
+  const count = (lv) => sentences.filter((s) => s.level === lv).length;
+  const lm = state[inspectSide].lm;
+  const note = lmAvailable === null ? "正在检查本地 GPT-2…"
+    : !lmAvailable ? "现在只用规则判断，在本机运行 server.py 后会加上逐句困惑度。"
+    : lm.status === "loading" ? "正在计算逐句困惑度…"
+    : lm.status === "error" ? "逐句困惑度计算出错，暂时只用规则判断。" : "";
+  $("inspectSummary").innerHTML = `${esc(n[inspectSide])} 共 ${sentences.length} 句：<strong>很像 AI ${count(2)} 句</strong>，有点像 ${count(1)} 句。${note}`;
+}
+
+// 点句子时，在输入框里选中它，方便直接改
+function selectInEditor(e) {
+  const el = e.target.closest("[data-start]");
+  if (!el) return;
+  const ta = $("text" + inspectSide);
+  const start = Number(el.dataset.start);
+  ta.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  ta.focus({ preventScroll: true });
+  ta.setSelectionRange(start, Number(el.dataset.end));
+  // 输入框内部也滚到这句附近（按字符位置估算）
+  ta.scrollTop = Math.max(0, (start / Math.max(ta.value.length, 1)) * ta.scrollHeight - ta.clientHeight / 3);
+}
+
+// ---------- 准确率 ----------
+function renderAccuracy() {
+  if (!model?.evaluation) {
+    $("stats").innerHTML = "";
+    $("accuracyNote").textContent = modelError || "";
+    return;
+  }
+  const ev = model.evaluation;
+  const top = ev[ev.bino ? "bino" : "full"];
+  const tiles = [
+    ["fpr", top.possible_fpr, "人写文本误判率", "RAID 测试集，按“可能有 AI 成分”这条线"],
+    ["tpr", top.possible_tpr, "AI 文本检出率", "同上，GPT-4、ChatGPT 等 6 个模型"],
+    ["tpr", top.bench_ai_possible_tpr, "2026 新模型检出率", "完全没参与训练的 2026 年模型文本"],
+    ["fpr", top.esl_possible_fpr, "非母语作者误判率", "非英语国家作者写的论文段落"],
+  ];
+  $("stats").innerHTML = tiles.map(([kind, v, label, note]) =>
+    `<div class="stat" data-kind="${kind}"><span class="stat-value">${(v * 100).toFixed(0)}%</span>`
+    + `<span class="stat-label">${label}</span><span class="stat-note">${note}</span></div>`).join("");
+  $("accuracyNote").innerHTML = `以上是包含 GPT-2 的完整版。只用规则时（直接打开网页链接、没有运行 server.py），`
+    + `误判率 ${(ev.rules.possible_fpr * 100).toFixed(0)}%、检出率 ${(ev.rules.possible_tpr * 100).toFixed(0)}%。`
+    + `这些数字只代表 Nuts 自己，不代表 Turnitin 或 GPTZero。完整评测在项目里的 <code>reports/evaluation.md</code>。`;
+  $("sentenceCaveat").textContent = `逐句判断用单独训练的逐句模型：“很像 AI”的线让大约 ${Math.round(model.sentence.full.fpr_high * 100)}% 的人写句子越线，`
+    + `“有点像”约 ${Math.round(model.sentence.full.fpr_mid * 100)}%。单个句子信息很少，误判比整篇多得多，只适合用来找重点。点一下句子，会在上面的输入框里选中它。`;
+}
+
+// ---------- 整体渲染与数据流 ----------
+function render() {
+  for (const s of SIDES) {
+    const r = state[s].rule;
+    $("count" + s).textContent = r ? `${r.words} 词` : "空";
+    renderVerdict(s);
+  }
+  renderTable();
+  renderInspector();
+}
+
+function scheduleLm(side) {
+  if (!lmAvailable) return;
+  clearTimeout(timers[side]);
+  const text = $("text" + side).value;
+  const seq = ++state[side].seq; // 只采用最新一次请求的结果
+  if (!text.trim()) {
+    state[side].lm = { status: "idle" };
+    render();
+    return;
+  }
+  state[side].lm = { status: "loading" };
+  render();
+  timers[side] = setTimeout(async () => {
+    let next;
+    try {
+      const res = await fetch("/api/score", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+      const data = await res.json();
+      next = res.ok ? { status: "ok", data } : { status: "error", error: data.error || res.statusText };
+    } catch {
+      next = { status: "error", error: "连接不到 server.py，确认它还在运行" };
+    }
+    if (seq !== state[side].seq) return;
+    state[side].lm = next;
+    render();
+  }, 600);
+}
+
+function update(side) {
+  const text = $("text" + side).value;
+  state[side].rule = model && text.trim() ? Core.analyze(text, model.phrases) : null;
+  render();
+  scheduleLm(side);
+}
+
+// 页面由 server.py 提供时才能算困惑度；在 Artifact 或直接打开文件时只用规则指标
+async function checkServer() {
+  try {
+    const res = await fetch("/api/score", { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"text":""}' });
+    lmAvailable = res.ok && (res.headers.get("content-type") || "").includes("application/json");
+  } catch {
+    lmAvailable = false;
+  }
+  const status = $("status");
+  status.dataset.state = lmAvailable ? "ok" : "off";
+  status.textContent = lmAvailable ? "GPT-2 已连接" : "GPT-2 未连接 · 只用规则指标";
+  render();
+  if (lmAvailable) SIDES.forEach(scheduleLm);
+}
+
+async function loadModel() {
+  try {
+    const res = await fetch("model.json");
+    if (!res.ok) throw new Error(res.statusText);
+    model = await res.json();
+  } catch {
+    modelError = "没能加载 model.json。请用 server.py 打开网页，或者确认 model.json 和网页在同一个文件夹。";
+  }
+  SIDES.forEach(update);
+  renderAccuracy();
+}
+
+for (const s of SIDES) {
+  $("text" + s).addEventListener("input", () => { inspectSide = s; update(s); });
+  $("name" + s).addEventListener("input", render);
+  $("pick" + s).addEventListener("click", () => { inspectSide = s; renderInspector(); });
+  $("file" + s).addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    $("text" + s).value = await file.text();
+    $("name" + s).value = file.name.replace(/\.txt$/i, "");
+    e.target.value = "";
+    inspectSide = s;
+    update(s);
+  });
+}
+$("prose").addEventListener("click", selectInEditor);
+$("flagged").addEventListener("click", selectInEditor);
+
+$("copy").addEventListener("click", async () => {
+  const n = names();
+  const rows = [["指标", n.A, n.B], ["AI 可能性", ...SIDES.map((s) => { const r = docResult(s); return r ? pct(r.prob) : "—"; })]];
+  for (const metric of METRICS) {
+    if (metric.lm && !lmAvailable) continue;
+    rows.push([metric.label, fmt(valueOf("A", metric), metric.d), fmt(valueOf("B", metric), metric.d)]);
+  }
+  const btn = $("copy");
+  try {
+    await navigator.clipboard.writeText(rows.map((r) => r.join("\t")).join("\n"));
+    btn.textContent = "已复制，可直接粘贴到 Excel";
+  } catch {
+    btn.textContent = "复制失败，请手动选中表格复制";
+  }
+  setTimeout(() => { btn.textContent = "复制结果表"; }, 2000);
+});
+
+render();
+loadModel();
+checkServer();
+</script>

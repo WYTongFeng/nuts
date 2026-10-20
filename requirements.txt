@@ -1,0 +1,7 @@
+# 分析器和本地网页需要的包。
+# PyTorch 先单独装：Windows + NVIDIA 显卡请到 https://pytorch.org/get-started/locally/
+# 选 Windows / Pip / Python / 和 nvidia-smi 显示的 CUDA 版本对应的选项，复制那条命令运行；
+# macOS 直接 pip install torch 即可。
+torch>=2.4
+transformers>=4.56
+huggingface_hub>=0.34

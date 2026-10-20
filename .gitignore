@@ -1,0 +1,14 @@
+# 虚拟环境和缓存
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# 评测数据和语言模型打分缓存：体积大、各有许可，用 evaluate.py fetch / run 重新生成
+data/
+
+# Claude 在本机的预览设置
+.claude/
+
+# 你自己的作业、测试文本，不要上传
+private/

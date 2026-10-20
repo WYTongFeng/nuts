@@ -1,0 +1,323 @@
+{
+ "version": 2,
+ "trained_on": "RAID（ACL 2024）论文摘要、书籍概要、新闻：人写 vs GPT-4、ChatGPT、Llama-2、Mistral、Cohere、MPT",
+ "phrases": [
+  "challenges",
+  "potential",
+  "follows",
+  "powerful",
+  "including",
+  "explores",
+  "the power",
+  "leading",
+  "impact",
+  "power of",
+  "the potential",
+  "forces",
+  "despite the",
+  "complex",
+  "future",
+  "the power of",
+  "nature",
+  "power",
+  "impact on",
+  "delves",
+  "learns",
+  "the challenges",
+  "explores the",
+  "provides",
+  "relationships",
+  "leading to",
+  "range of",
+  "ability",
+  "delve",
+  "it is important to note",
+  "it's important to note",
+  "in today's",
+  "fast paced",
+  "plays a crucial role",
+  "plays a vital role",
+  "in conclusion",
+  "overall",
+  "a testament to",
+  "tapestry",
+  "navigate the",
+  "landscape",
+  "realm",
+  "multifaceted",
+  "pivotal",
+  "foster",
+  "underscore",
+  "robust",
+  "nuanced",
+  "embark",
+  "in summary",
+  "ever evolving",
+  "shed light"
+ ],
+ "min_words": 80,
+ "doc": {
+  "full": {
+   "features": [
+    "log_ppl",
+    "log_sent_ppl_std",
+    "top10",
+    "burst",
+    "avg_word_len",
+    "log_phrases",
+    "commas_per_sentence"
+   ],
+   "mean": [
+    3.0270872503639734,
+    2.860981365686786,
+    0.7339476557330327,
+    0.3189502784130111,
+    5.058500109329293,
+    1.674272845877437,
+    1.1986748786093175
+   ],
+   "scale": [
+    0.5682927170134947,
+    0.9504206075181381,
+    0.07607561505286467,
+    0.12718155230456593,
+    0.5267637047468436,
+    1.3314735867923924,
+    0.6387077966381279
+   ],
+   "coef": [
+    -2.861974113905857,
+    0.5479447472391541,
+    0.5909332912868526,
+    -1.0266077705462662,
+    1.135926372662817,
+    0.972441283786895,
+    0.4739823759264454
+   ],
+   "intercept": 0.27882961953938573,
+   "thresholds": {
+    "likely": 0.7608672483909134,
+    "possible": 0.4430091761252103
+   },
+   "min_words": 80
+  },
+  "rules": {
+   "features": [
+    "burst",
+    "avg_word_len",
+    "log_phrases",
+    "commas_per_sentence"
+   ],
+   "mean": [
+    0.3189502784130111,
+    5.058500109329293,
+    1.674272845877437,
+    1.1986748786093175
+   ],
+   "scale": [
+    0.12718155230456593,
+    0.5267637047468436,
+    1.3314735867923924,
+    0.6387077966381279
+   ],
+   "coef": [
+    -1.2299244989730351,
+    -0.004124609458658186,
+    1.2484873084281078,
+    0.09612086404635725
+   ],
+   "intercept": 0.0005672781117432447,
+   "thresholds": {
+    "likely": 0.8170783998527434,
+    "possible": 0.6481388748573428
+   },
+   "min_words": 80
+  }
+ },
+ "sentence": {
+  "full": {
+   "features": [
+    "log_ppl",
+    "top10",
+    "log_hits",
+    "log_words",
+    "avg_word_len",
+    "commas"
+   ],
+   "mean": [
+    3.0049830289669854,
+    0.7383801814486823,
+    0.12437271492285468,
+    3.0642610800234,
+    4.980583729965832,
+    1.1581928523263654
+   ],
+   "scale": [
+    0.801675907767361,
+    0.11461214463575506,
+    0.3165301259796756,
+    0.3968608219791083,
+    0.7359625790649976,
+    1.2170645396296802
+   ],
+   "coef": [
+    -1.2570756034313726,
+    0.12683278104493145,
+    0.49437631092535567,
+    0.09276595511821377,
+    0.7324454419637149,
+    0.15160930788421229
+   ],
+   "intercept": -0.14264296297079304,
+   "thresholds": {
+    "high": 0.7384050230438103,
+    "mid": 0.5708743285454108
+   },
+   "fpr_high": 0.05,
+   "fpr_mid": 0.15
+  },
+  "rules": {
+   "features": [
+    "log_hits",
+    "log_words",
+    "avg_word_len",
+    "commas"
+   ],
+   "mean": [
+    0.12437271492285468,
+    3.0642610800234,
+    4.980583729965832,
+    1.1581928523263654
+   ],
+   "scale": [
+    0.3165301259796756,
+    0.3968608219791083,
+    0.7359625790649976,
+    1.2170645396296802
+   ],
+   "coef": [
+    0.5814631208023823,
+    0.03252028869580926,
+    0.33271286055960986,
+    0.1596889767640955
+   ],
+   "intercept": -0.08249958027587428,
+   "thresholds": {
+    "high": 0.6884748370975698,
+    "mid": 0.52294532849559
+   },
+   "fpr_high": 0.05,
+   "fpr_mid": 0.15
+  }
+ },
+ "feature_stats": {
+  "ppl": {
+   "human": 31.0337,
+   "ai": 13.2021
+  },
+  "sent_ppl_std": {
+   "human": 21.3373,
+   "ai": 10.5705
+  },
+  "top10": {
+   "human": 0.6815,
+   "ai": 0.7894
+  },
+  "burst": {
+   "human": 0.3616,
+   "ai": 0.2488
+  },
+  "mattr": {
+   "human": 0.817,
+   "ai": 0.8035
+  },
+  "avg_word_len": {
+   "human": 4.8654,
+   "ai": 5.1051
+  },
+  "phrases_per_1k": {
+   "human": 0.0,
+   "ai": 14.5985
+  },
+  "commas_per_sentence": {
+   "human": 1.0,
+   "ai": 1.2
+  },
+  "mean_len": {
+   "human": 21.8571,
+   "ai": 22.7333
+  },
+  "para_cv": {
+   "human": 0.5906,
+   "ai": 0.2192
+  }
+ },
+ "feature_auc": {
+  "ppl": {
+   "auc": 0.875,
+   "higher_is_ai": false
+  },
+  "sent_ppl_std": {
+   "auc": 0.751,
+   "higher_is_ai": false
+  },
+  "top10": {
+   "auc": 0.866,
+   "higher_is_ai": true
+  },
+  "burst": {
+   "auc": 0.817,
+   "higher_is_ai": false
+  },
+  "mattr": {
+   "auc": 0.505,
+   "higher_is_ai": true
+  },
+  "avg_word_len": {
+   "auc": 0.641,
+   "higher_is_ai": true
+  },
+  "phrases_per_1k": {
+   "auc": 0.809,
+   "higher_is_ai": true
+  },
+  "old_phrases": {
+   "auc": 0.681,
+   "higher_is_ai": true
+  },
+  "commas_per_sentence": {
+   "auc": 0.574,
+   "higher_is_ai": true
+  },
+  "mean_len": {
+   "auc": 0.502,
+   "higher_is_ai": true
+  },
+  "para_cv": {
+   "auc": 0.867,
+   "higher_is_ai": false
+  }
+ },
+ "evaluation": {
+  "full": {
+   "auc": 0.9625,
+   "likely_fpr": 0.024,
+   "likely_tpr": 0.7949,
+   "possible_fpr": 0.12,
+   "possible_tpr": 0.8974,
+   "bench_ai_possible_tpr": 0.9821,
+   "esl_possible_fpr": 0.2131,
+   "wiki_possible_fpr": 0.1935
+  },
+  "rules": {
+   "auc": 0.8853,
+   "likely_fpr": 0.048,
+   "likely_tpr": 0.4872,
+   "possible_fpr": 0.12,
+   "possible_tpr": 0.6923,
+   "bench_ai_possible_tpr": 0.5536,
+   "esl_possible_fpr": 0.1148,
+   "wiki_possible_fpr": 0.1226
+  }
+ }
+}
