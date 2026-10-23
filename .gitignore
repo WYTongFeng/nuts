@@ -12,3 +12,12 @@ data/
 
 # 你自己的作业、测试文本，不要上传
 private/
+
+# Local delivery bundles and preview screenshots
+output/
+
+# Local experiment exports may contain private text
+nuts-experiment-*.json
+.env
+.env.*
+!.env.example

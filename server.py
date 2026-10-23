@@ -1,88 +1,131 @@
-"""Nuts 网页版的本地服务器：提供 analyzer.html，并用 GPT-2 计算困惑度。
-
-用法:
-    .venv/bin/python server.py              # 自动在浏览器打开
-    .venv/bin/python server.py --no-browser
-"""
+"""Nuts local web app. Run python server.py [--no-browser]."""
 import json
 import sys
+import threading
 import webbrowser
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import perplexity
+import rewriting
 
 ROOT = Path(__file__).parent
-PORTS = range(8000, 8011)  # 8000 被占用时依次往后试
-# analyzer.html 按 Artifact 的格式只写了页面内容，本地访问时补上文档外壳
-SHELL = (
-    '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
-    '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
-    "</head><body>{}</body></html>"
-)
-STATIC = {
-    "/nuts-core.js": ("nuts-core.js", "text/javascript; charset=utf-8"),
-    "/model.json": ("model.json", "application/json"),
-}
+PORTS = range(8000, 8011)
+SHELL = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>{}</body></html>'
+STATIC = { '/' + name: (name, mime) for name, mime in [
+    ('nuts-core.js', 'text/javascript'), ('app.js', 'text/javascript'),
+    ('app.css', 'text/css'), ('model.json', 'application/json')] }
+MODEL_LOCK = threading.Lock()
+
+
+def score(text):
+    import perplexity
+    return perplexity.details(text)
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # 每次请求都重新读文件，改了页面刷新就能看到
-        if self.path == "/":
-            page = SHELL.format((ROOT / "analyzer.html").read_text(encoding="utf-8"))
-            self._send(200, "text/html; charset=utf-8", page.encode())
+        if self.path == '/':
+            self._send(200, 'text/html; charset=utf-8', SHELL.format((ROOT / 'analyzer.html').read_text(encoding='utf-8')).encode())
+        elif self.path == '/api/status':
+            self._json(200, rewriting.status())
         elif self.path in STATIC:
-            name, content_type = STATIC[self.path]
-            self._send(200, content_type, (ROOT / name).read_bytes())
+            name, mime = STATIC[self.path]
+            self._send(200, mime + '; charset=utf-8', (ROOT / name).read_bytes())
         else:
             self.send_error(404)
 
     def do_POST(self):
-        if self.path != "/api/score":
+        if self.path not in ('/api/score', '/api/rewrite'):
             self.send_error(404)
             return
-        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-        text = json.loads(body or b"{}").get("text", "")
+        origin = self.headers.get('Origin')
+        if origin and origin != 'http://' + self.headers.get('Host', ''):
+            self._json(403, {'error': '只接受本地页面的请求。'})
+            return
         try:
-            overall, sentences = perplexity.details(text) if text.strip() else ({}, [])
-            status, result = 200, {"metrics": overall, "sentences": sentences}
-        except Exception as e:
-            status, result = 500, {"error": str(e)}
-        self._send(status, "application/json", json.dumps(result, ensure_ascii=False).encode())
+            length = int(self.headers.get('Content-Length', 0))
+            if not 0 <= length <= 60000:
+                raise ValueError('请求太大。')
+            data = json.loads(self.rfile.read(length) or b'{}')
+            if not isinstance(data, dict) or not isinstance(data.get('text', ''), str):
+                raise ValueError('text 必须是文本。')
+            text = data.get('text', '')
+            if len(text) > 20000 or len(text.split()) > 2000:
+                raise ValueError('第一版每次最多处理 2,000 个词、20,000 个字符。')
+            if self.path == '/api/score' and not text.strip():
+                self._json(200, {'metrics': {}, 'sentences': []})
+                return
+            if self.path == '/api/rewrite':
+                if not text.strip():
+                    raise ValueError('请先输入英文。')
+                terms = data.get('terms', [])
+                if not isinstance(terms, list) or len(terms) > 50 or any(not isinstance(t, str) or len(t) > 100 for t in terms):
+                    raise ValueError('保留术语格式无效。')
+                attempt, strength, voice, audit = data.get('attempt', 0), data.get('strength', 'balanced'), data.get('voice', ''), data.get('audit', False)
+                if type(attempt) is not int or not 0 <= attempt < 3 or not isinstance(strength, str) or strength not in rewriting.STRENGTHS or not isinstance(voice, str) or len(voice) > 3000 or type(audit) is not bool:
+                    raise ValueError('候选序号、改写强度或写作样本格式无效。')
+                if not isinstance(data.get('style'), str) or data.get('style') not in rewriting.STYLES or not isinstance(data.get('model'), str):
+                    raise ValueError('请选择润色风格和本地模型。')
+        except (ValueError, TypeError) as e:
+            self._json(400, {'error': str(e)})
+            return
+        if not MODEL_LOCK.acquire(blocking=False):
+            self._json(409, {'error': '模型正在处理其他请求，请稍后重试。'})
+            return
+        try:
+            if self.path == '/api/score':
+                overall, sentences = score(text)
+                result = {'metrics': overall, 'sentences': sentences}
+            else:
+                result = rewriting.rewrite(text, data['style'], data['model'], terms, attempt=attempt, strength=strength, voice=voice, audit=audit)
+            self._json(200, result)
+        except ValueError as e:
+            self._json(400, {'error': str(e)})
+        except Exception:
+            self._json(503, {'error': '本地模型调用失败或超时。检测请检查 Python 依赖和 GPT-2 下载；润色请检查 Ollama 和模型。'})
+        finally:
+            MODEL_LOCK.release()
+
+    def _json(self, code, data):
+        self._send(code, 'application/json; charset=utf-8', json.dumps(data, ensure_ascii=False).encode())
 
     def _send(self, status, content_type, body):
         self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
-    def log_message(self, *args):  # 不逐条打印请求
+    def log_message(self, *args):
         pass
 
 
 def start_server():
     for port in PORTS:
         try:
-            return HTTPServer(("127.0.0.1", port), Handler), port
+            return ThreadingHTTPServer(('127.0.0.1', port), Handler), port
         except OSError:
             continue
-    sys.exit(f"端口 {PORTS.start}-{PORTS.stop - 1} 都被占用了，先关掉之前开的 server.py 再试")
+    sys.exit('8000–8010 端口都被占用。')
 
 
 def main():
     server, port = start_server()
-    perplexity.load()  # 先加载模型，第一次分析就不用等
-    url = f"http://localhost:{port}"
-    print(f"Nuts 已启动：{url}（按 Ctrl+C 停止）")
-    if "--no-browser" not in sys.argv:
+    url = f'http://localhost:{port}'
+    print(f'Nuts 已启动：{url}（Ctrl+C 停止）', flush=True)
+    if '--no-browser' not in sys.argv:
         webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        server.server_close()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

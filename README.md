@@ -1,12 +1,33 @@
 # Nuts
 
+> **本地第二版已加入多候选英文润色。** 中文工作台、英文检测、本地 Ollama 多候选润色、保留检查与外部实测记录。另一台电脑的安装启动步骤见 [LOCAL_SETUP.md](LOCAL_SETUP.md)：Windows 先运行 `setup.bat`，再运行 `start.bat`。润色需单独安装 Ollama 并下载模型。下方保留原检测引擎的研究说明与评测；既有评测数字不代表润色效果。
+
+## 先从这里开始
+
+**完整操作手册：[OPERATIONS.md](OPERATIONS.md)**，包含 GitHub 下载、Windows / macOS 安装、Ollama、检测、三候选润色、实测记录、保存、更新与故障排查。
+
+| 想做什么 | 看哪里 |
+|---|---|
+| 第一次在另一台电脑使用 | [完整操作手册](OPERATIONS.md) / [简版安装说明](LOCAL_SETUP.md) |
+| 查看第二版测试结果和限制 | [第二版验证记录](reports/local-v2-validation.md) |
+| 查看检测引擎历史评测 | [检测评测报告](reports/evaluation.md) |
+| 了解后续检测升级设想 | [旧计划](PLAN.md) |
+
+Windows 快速开始：从本仓库 **Code → Download ZIP** 下载并解压，安装 Python 3.12，运行 `setup.bat`，再运行 `start.bat`。润色需单独安装 Ollama 并执行 `ollama pull qwen2.5:7b`。网站运行在本机，GitHub 只存源码和文档。
+
+当前润色支持多候选、改写强度、自己的写作样本、内容检查和手工外部成绩记录。**尚无四个平台的已验证成绩，也不保证全平台 0%。** 下方数字属于既有检测模型，不是改写效果。
+
+## 检测引擎背景
+
 英文文本的 AI 特征分析器，用来研究 AI 检测：判断一段文字像不像 AI 写的，解释原因，逐句标出最像 AI 的地方，并公开自己的准确率。
 
 Nuts 不是 Turnitin 或 GPTZero，两边的结果不能互换。任何检测器都会误判，非英语母语作者的文字尤其容易被误判。
 
-**下一步的升级计划见 [PLAN.md](PLAN.md)**：在有 NVIDIA 显卡的电脑上加入更强的开源检测模型，并换成新的检测界面。
+**原检测升级计划见 [PLAN.md](PLAN.md)**：更强检测模型等未实施内容仍是后续计划；当前中文工作台已更新。
 
-## 安装
+## 开发者安装（检测与重新评测）
+
+日常使用请优先按上方操作手册执行，无需安装评测依赖。
 
 需要 Python 3.10 以上（Windows 推荐 3.12）。
 
@@ -30,7 +51,7 @@ Nuts 不是 Turnitin 或 GPTZero，两边的结果不能互换。任何检测器
 
 ## 使用
 
-1. **网页链接**（不用安装）：https://claude.ai/artifact/SnzDdBfbWkFfrtFUNf7ib6 。只有规则指标，准确率比完整版低。链接默认是私有的，要给别人看需要在页面的 Share 菜单里分享。
+1. **旧检测版网页链接**（不含本次新增润色）：https://claude.ai/artifact/SnzDdBfbWkFfrtFUNf7ib6 。只有规则指标，准确率比完整版低。链接默认是私有的，要给别人看需要在页面的 Share 菜单里分享。
 2. **本地网页**（完整版，含 GPT-2）：
 
    ```bash
@@ -119,7 +140,10 @@ Nuts 不是 Turnitin 或 GPTZero，两边的结果不能互换。任何检测器
 
 | 文件 | 作用 |
 |---|---|
-| `analyzer.html`、`nuts-core.js` | 网页（`nuts-core.js` 是 `textfeatures.py` 和 `model.py` 的 JS 版） |
+| `analyzer.html`、`app.css`、`app.js` | 中文检测与润色工作台 |
+| `nuts-core.js` | 规则和评分计算，与 Python 保持一致 |
+| `rewriting.py` | 本地 Ollama 润色接口 |
+| `LOCAL_SETUP.md`、`setup.bat`、`start.bat` | 另一台电脑的安装和启动 |
 | `server.py` | 本地网页服务器，提供语言模型打分接口 |
 | `analyzer.py` | 命令行 |
 | `textfeatures.py` | 文本清理、切句、分段和规则指标 |
