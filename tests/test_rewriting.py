@@ -15,11 +15,14 @@ class LocalIntegrationTest(unittest.TestCase):
         cls.calls = []
         class Ollama(BaseHTTPRequestHandler):
             def do_GET(self):
-                self.send({'models': [{'name': 'local-editor:7b'}, {'name': 'remote:cloud'},
+                self.send({'models': [{'name': 'local-editor:7b'}, {'name': 'reviewer:4b'}, {'name': 'remote:cloud'},
                                       {'name': 'alias', 'remote_model': 'remote'}]})
             def do_POST(self):
                 payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 cls.calls.append(payload)
+                if self.path == '/api/show':
+                    self.send({'thinking': {'values': [False, True]}})
+                    return
                 if 'format' in payload:
                     self.send({'message': {'content': json.dumps({'meaning_preserved': True, 'added_claims': [], 'missing_claims': [], 'changed_claims': []})}, 'done_reason': 'stop'})
                     return
@@ -48,6 +51,11 @@ class LocalIntegrationTest(unittest.TestCase):
             svc.server_close()
         cls.patch.stop()
 
+    def setUp(self):
+        rewriting._active_model = None
+        rewriting._model_info.clear()
+        self.calls.clear()
+
     def post(self, body, path='/api/rewrite', origin=None):
         headers = {'Content-Type': 'application/json'}
         if origin:
@@ -71,7 +79,8 @@ class LocalIntegrationTest(unittest.TestCase):
         self.assertEqual(data['text'], 'The API improves clarity.')
         self.assertEqual(data['missing_terms'], [])
         self.assertFalse(self.calls[-1]['stream'])
-        self.assertEqual(self.calls[-1]['keep_alive'], 0)
+        self.assertEqual(self.calls[-1]['keep_alive'], '5m')
+        self.assertFalse(self.calls[-1]['think'])
         self.assertIn('The API has good clarity.', self.calls[-1]['messages'][-1]['content'])
 
     def test_audited_candidate_round_trip(self):
@@ -88,7 +97,7 @@ class LocalIntegrationTest(unittest.TestCase):
 
     def test_status_excludes_remote_models(self):
         with urllib.request.urlopen(self.base + '/api/status') as res:
-            self.assertEqual(json.load(res)['models'], ['local-editor:7b'])
+            self.assertEqual(json.load(res)['models'], ['local-editor:7b', 'reviewer:4b'])
 
     def test_validation(self):
         for body in (b'{broken', [], {'text': 42}, {'text': 'a'*20001},
@@ -118,6 +127,64 @@ class LocalIntegrationTest(unittest.TestCase):
         with patch.object(rewriting, 'rewrite', side_effect=TimeoutError):
             self.assertEqual(self.post(self.payload())[0], 503)
         self.assertFalse(server.MODEL_LOCK.locked())
+
+    def test_distinct_reviewer_and_model_lifecycle(self):
+        code, candidate = self.post(self.payload())
+        self.assertEqual(code, 200)
+        self.assertFalse(candidate['eligible'])
+        self.assertEqual(candidate['runtime']['context'], 4096)
+        code, audit = self.post({**self.payload(), 'model': 'reviewer:4b',
+                                'output': candidate['text']}, '/api/review')
+        self.assertEqual(code, 200)
+        self.assertTrue(audit['eligible'])
+        self.assertEqual(audit['review']['model'], 'reviewer:4b')
+        unload = next(i for i, p in enumerate(self.calls) if p.get('keep_alive') == 0)
+        review = next(i for i, p in enumerate(self.calls) if 'format' in p)
+        self.assertLess(unload, review)
+        self.assertEqual(self.calls[unload]['model'], 'local-editor:7b')
+        self.assertEqual(self.post({}, '/api/release')[0], 200)
+        self.assertIsNone(rewriting._active_model)
+
+    def test_same_model_stays_warm(self):
+        self.post(self.payload())
+        self.post(self.payload())
+        self.assertFalse(any(p.get('keep_alive') == 0 for p in self.calls))
+
+    def test_invalid_review_and_profile(self):
+        for output in ('', 12, 'x' * 28001):
+            self.assertEqual(self.post({**self.payload(), 'output': output}, '/api/review')[0], 400)
+        self.assertEqual(self.post({**self.payload(), 'profile': 'bad'})[0], 400)
+        self.assertEqual(self.post({**self.payload(), 'output': 'Valid text', 'model': 'remote:cloud'}, '/api/review')[0], 400)
+
+    def test_review_failure_never_eligible(self):
+        with patch.object(rewriting, 'chat', side_effect=TimeoutError):
+            code, data = self.post({**self.payload(), 'output': 'The API improves clarity.'}, '/api/review')
+        self.assertEqual(code, 200)
+        self.assertFalse(data['eligible'])
+        self.assertEqual(data['review']['status'], 'unavailable')
+
+    def test_quality_failure_skips_review(self):
+        with patch.object(rewriting, 'review') as review:
+            code, data = self.post({**self.payload(), 'text': 'The API costs 300 dollars.',
+                                   'output': 'The API costs 900 dollars.'}, '/api/review')
+        self.assertEqual(code, 200)
+        self.assertFalse(data['eligible'])
+        review.assert_not_called()
+
+    def test_review_cannot_override_computed_status(self):
+        forged = json.dumps({'meaning_preserved': False, 'added_claims': [],
+                             'missing_claims': [], 'changed_claims': [], 'status': 'passed'})
+        with patch.object(rewriting, 'chat', return_value=forged):
+            code, data = self.post({**self.payload(), 'output': 'The API improves clarity.'}, '/api/review')
+        self.assertEqual(code, 200)
+        self.assertFalse(data['eligible'])
+        self.assertEqual(data['review']['status'], 'unavailable')
+
+    def test_context_budget_and_limit(self):
+        self.assertEqual(rewriting.runtime_options([{'content': 'a' * 7000}], 1024, 'rtx3060')['num_ctx'], 8192)
+        with self.assertRaises(ValueError):
+            rewriting.runtime_options([{'content': 'a' * 20000}], 1024, 'rtx3060')
+        self.assertEqual(rewriting.runtime_options([{'content': 'short'}], 512, 'context8k')['num_ctx'], 8192)
 
     def test_truncation_is_not_accepted(self):
         with patch.object(rewriting, 'status', return_value={'models': ['local-editor:7b']}), patch.object(rewriting, 'request', return_value={'message': {'content': 'partial'}, 'done_reason': 'length'}):

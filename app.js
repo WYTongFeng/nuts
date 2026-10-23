@@ -49,7 +49,16 @@ async function refreshModels() {
     $('localModel').replaceChildren(...data.models.map(name => new Option(name, name)));
     if (!data.models.length) $('localModel').add(new Option('尚无可用的本地模型', ''));
     if (data.models.includes(old)) $('localModel').value = old;
+    else if (data.models.includes('qwen3:4b')) $('localModel').value = 'qwen3:4b';
     else if (data.models.includes('qwen2.5:7b')) $('localModel').value = 'qwen2.5:7b';
+    for (const id of ['model2','model3','reviewModel']) {
+      const select=$(id), previous=select.value, initial=!select.dataset.loaded;
+      select.replaceChildren(new Option(id==='reviewModel'?'使用润色模型 1':'不使用',''), ...data.models.map(name=>new Option(name,name)));
+      if(data.models.includes(previous)) select.value=previous;
+      else if(initial && id==='model2' && data.models.includes('gemma3:4b') && $('localModel').value!=='gemma3:4b') select.value='gemma3:4b';
+      else if(initial && id==='reviewModel' && data.models.includes('qwen2.5:7b')) select.value='qwen2.5:7b';
+      select.dataset.loaded='true';
+    }
     if (old !== $('localModel').value) dirty();
     $('modelStatus').textContent = data.available ? (data.models.length ? '已连接本机 Ollama。首次加载模型可能需要稍等。' : 'Ollama 已连接，请先下载模型，例如在终端运行 ollama pull qwen2.5:7b。') : '尚未连接 Ollama。请在这台电脑安装并启动 Ollama，下载模型后点击“刷新连接”。';
   } catch { $('modelStatus').textContent = '连接不到本地服务，请通过启动脚本打开网站。'; }
@@ -137,7 +146,7 @@ function selectCandidate(index) {
   $('output').value=output; $('diff').innerHTML=diffText(experiment.original,output);
   $('engine').textContent=current?.model || '原文基线';
   $('candidates').replaceChildren();
-  const labels=['原文',...experiment.candidates.map((c,i)=>`版本 ${i+1} · ${c.strategy}${c.duplicate?'（重复）':''}`)];
+  const labels=['原文',...experiment.candidates.map((c,i)=>`版本 ${i+1} · ${c.model} · ${c.strategy}${c.duplicate?'（重复）':''}`)];
   labels.forEach((label,i)=>{const button=document.createElement('button');button.textContent=label;button.setAttribute('aria-pressed',i===index);button.onclick=()=>selectCandidate(i);$('candidates').append(button);});
   const baseline=experiment.candidates[0]?.original_score?.score;
   $('qualityNote').classList.toggle('quality-flag',Boolean(current&&!current.eligible));
@@ -145,9 +154,9 @@ function selectCandidate(index) {
     const semantic=current.review;
     const issues=[...current.quality.issues,...current.quality.warnings];
     if(semantic.status==='flagged') issues.push('语义复核发现疑点：'+[...semantic.added_claims,...semantic.missing_claims,...semantic.changed_claims].join('；'));
-    if(semantic.status==='unavailable') issues.push('语义复核未完成');
+    if(semantic.status==='unavailable') issues.push(semantic.reason || '语义复核未完成');
     if(semantic.status==='skipped') issues.push('语义复核已跳过');
-    $('qualityNote').textContent=`Nuts 规则参考：原文 ${scoreLabel(baseline)} → 当前 ${scoreLabel(candidateScore(current))}。${current.eligible?'自动检查未发现问题（仍需人工核对）。':'不自动推荐此版本。'} ${issues.join('；')}`;
+    $('qualityNote').textContent=`Nuts 规则参考：原文 ${scoreLabel(baseline)} → 当前 ${scoreLabel(candidateScore(current))}。${current.eligible?'自动检查未发现问题（仍需人工核对）。':'不自动推荐此版本。'} ${issues.join('；')} 生成：${current.model}（${current.runtime?.seconds ?? '—'} 秒）；复核：${semantic.model || '待复核'}（${semantic.runtime?.seconds ?? '—'} 秒）。`;
   } else $('qualityNote').textContent=`原文 Nuts 规则参考：${scoreLabel(baseline)}。切换版本查看检查结果。`;
   $('rewriteWarning').textContent='不要把本地评分当成外部平台的预测值。选择版本后，请检查原意、事实和引用。';
   renderExternal();
@@ -197,6 +206,7 @@ async function run() {
   const requestMode=mode;
   busy=true;
   for (const id of ['run','detectTab','rewriteTab','apply','undo']) $(id).disabled=true;
+  document.querySelectorAll('#settings select, #settings input, #settings textarea, #settings button').forEach(el=>el.disabled=true);
   $('run').textContent='处理中…';
   message(mode==='detect'?'正在检测。首次使用 GPT-2 需要下载模型，可能需要几分钟。':'本地模型正在润色，可能需要几分钟，请保持页面打开。');
   try {
@@ -212,17 +222,21 @@ async function run() {
       message(fallback||'检测完成。点击右侧句子可定位原文。');
     } else {
       const config = {style:$('style').value, model:$('localModel').value, strength:$('strength').value,
-        voice:$('voice').value, terms:$('terms').value.split(/[,，\n]/).map(s=>s.trim()).filter(Boolean), audit:true};
-      const total = $('generation').value === 'compare' ? 3 : 1;
+        voice:$('voice').value, terms:$('terms').value.split(/[,，\n]/).map(s=>s.trim()).filter(Boolean), audit:false, profile:$('profile').value, reviewer:$('reviewModel').value || $('localModel').value};
+      const generation=$('generation').value;
+      const generators=generation==='multi' ? [...new Set([config.model,$('model2').value,$('model3').value].filter(Boolean))] : [config.model];
+      const jobs=generation==='compare' ? [0,1,2].map(attempt=>({model:config.model,attempt})) : generators.map(model=>({model,attempt:0}));
+      const total=jobs.length;
+      config.generators=generators; config.generation=generation;
       stopRequested = false; $('stop').hidden = false; resetDisplay(); lastRewrite=null; selectedCandidate=0;
       experiment = {id:crypto.randomUUID(), created_at:new Date().toISOString(), original:text, settings:config,
         candidates:[], failures:[], external:{original:{}}, target:0, detector_note:'Nuts rules scores are not third-party scores.'};
       let completed = 0;
       for (let attempt=0; attempt<total; attempt++) {
         if (stopRequested || currentRevision!==revision) break;
-        message(`正在生成并复核候选 ${attempt+1} / ${total}。每个候选独立参考原文，可能需要几分钟。`);
+        message(`正在生成候选 ${attempt+1} / ${total} · ${jobs[attempt].model}。生成完成后统一复核。`);
         try {
-          const data = await api('/api/rewrite', {...config, text, attempt});
+          const data = await api('/api/rewrite', {...config, text, ...jobs[attempt]});
           if (currentRevision!==revision) break;
           const duplicate = experiment.candidates.some(c=>c.text===data.text);
           experiment.candidates.push({...data, id:`candidate-${attempt+1}`, duplicate});
@@ -230,23 +244,42 @@ async function run() {
           renderExperiment();
         } catch(e) {
           experiment.failures.push({attempt:attempt+1, error:e.message});
-          if (e.status===400 || e.status===409) break;
+          if (e.status===409) break;
+        }
+      }
+      for (const candidate of experiment.candidates) {
+        if(stopRequested || currentRevision!==revision) break;
+        if(!candidate.quality.passed) continue;
+        message(`正在统一复核 ${candidate.id} · ${config.reviewer}。`);
+        try {
+          const audit=await api('/api/review', {...config, text, output:candidate.text, model:config.reviewer});
+          Object.assign(candidate,audit);
+          renderExperiment();
+        } catch(e) {
+          candidate.review={status:'unavailable',model:config.reviewer,reason:e.message}; candidate.eligible=false;
+          experiment.failures.push({candidate:candidate.id,stage:'review',error:e.message});
+          if(e.status===409) break;
         }
       }
       if (currentRevision!==revision) { $('rewritten').classList.add('stale'); return message('输入或设置已改变，请重新生成。已完成的结果对应旧输入。'); }
       if (!completed) throw new Error(experiment.failures[0]?.error || '本轮没有生成候选。');
       renderExperiment();
-      message(`已完成 ${completed} 个候选${stopRequested?'（已停止后续生成）':''}${experiment.failures.length?'；部分请求失败，已保留成功结果':''}。外部平台分数仍需实测。`);
+      message(`已完成 ${completed} 个候选${stopRequested?'（已停止后续请求，未复核版本不自动推荐）':''}${experiment.failures.length?`；部分请求失败，已保留成功结果：${experiment.failures[0].error}`:''}。外部平台分数仍需实测。`);
     }
   } catch(e) { message(e.message||'处理失败，请稍后再试。',true); }
   finally {
-    busy=false; $('stop').hidden=true; for(const id of ['run','detectTab','rewriteTab','apply','undo']) $(id).disabled=false;
+    if(requestMode==='rewrite') {
+      try { await api('/api/release',{}); }
+      catch { message($('message').textContent+' 模型释放未完成，可在终端使用 ollama stop 模型名。',true); }
+    }
+    busy=false; $('stop').hidden=true;
+    document.querySelectorAll('#settings select, #settings input, #settings textarea, #settings button').forEach(el=>el.disabled=false); for(const id of ['run','detectTab','rewriteTab','apply','undo']) $(id).disabled=false;
     $('run').textContent=requestMode==='detect'?'检测文本 ↗':'开始润色 ↗';
   }
 }
 $('detectTab').onclick=()=>switchMode('detect'); $('rewriteTab').onclick=()=>switchMode('rewrite');
 $('input').addEventListener('input',dirty); $('input').addEventListener('scroll',syncScroll);
-for(const id of ['style','terms','localModel','strength','generation','voice']) $(id).addEventListener('change',dirty);
+for(const id of ['style','terms','localModel','strength','generation','voice','model2','model3','reviewModel','profile']) $(id).addEventListener('change',dirty);
 $('terms').addEventListener('input',dirty); $('voice').addEventListener('input',dirty);
 $('stop').onclick=()=>{stopRequested=true;message('当前请求完成后将停止，已完成的候选会保留。');};
 $('showHighlights').onchange=highlights; $('run').onclick=run; $('refresh').onclick=refreshModels;

@@ -35,7 +35,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
-        if self.path not in ('/api/score', '/api/rewrite'):
+        if self.path not in ('/api/score', '/api/rewrite', '/api/review', '/api/release'):
             self.send_error(404)
             return
         origin = self.headers.get('Origin')
@@ -55,7 +55,14 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == '/api/score' and not text.strip():
                 self._json(200, {'metrics': {}, 'sentences': []})
                 return
-            if self.path == '/api/rewrite':
+            if self.path in ('/api/rewrite', '/api/review'):
+                profile = data.get('profile', 'rtx3060')
+                if profile not in ('rtx3060', 'context8k'):
+                    raise ValueError('请选择有效的运行配置。')
+                if self.path == '/api/review':
+                    output = data.get('output')
+                    if not isinstance(output, str) or not output.strip() or len(output) > 28000:
+                        raise ValueError('复核文本为空或过长。')
                 if not text.strip():
                     raise ValueError('请先输入英文。')
                 terms = data.get('terms', [])
@@ -74,10 +81,20 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             if self.path == '/api/score':
+                rewriting.release()
                 overall, sentences = score(text)
                 result = {'metrics': overall, 'sentences': sentences}
+            elif self.path == '/api/release':
+                rewriting.release()
+                result = {'released': True}
             else:
-                result = rewriting.rewrite(text, data['style'], data['model'], terms, attempt=attempt, strength=strength, voice=voice, audit=audit)
+                # Free GPT-2 CUDA allocations before Ollama needs the GPU.
+                if 'perplexity' in sys.modules:
+                    sys.modules['perplexity'].release_gpu()
+                if self.path == '/api/review':
+                    result = rewriting.audit_candidate(text, output, data['model'], terms, data['style'], profile)
+                else:
+                    result = rewriting.rewrite(text, data['style'], data['model'], terms, attempt=attempt, strength=strength, voice=voice, audit=audit, profile=profile)
             self._json(200, result)
         except ValueError as e:
             self._json(400, {'error': str(e)})

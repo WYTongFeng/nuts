@@ -39,6 +39,7 @@ def load():
             print("首次运行，正在下载 GPT-2 模型（约 500MB）…", file=sys.stderr)
         _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
         _model = AutoModelForCausalLM.from_pretrained(MODEL_NAME).to(DEVICE).eval()
+    _model.to(DEVICE)
     return _model, _tokenizer
 
 
@@ -106,3 +107,10 @@ def details(text):
 
 def score(text):
     return details(text)[0]
+
+
+def release_gpu():
+    """Keep GPT-2 in RAM while Ollama uses the GPU; avoid another disk reload."""
+    if _model is not None and DEVICE == 'cuda':
+        _model.to('cpu')
+        torch.cuda.empty_cache()

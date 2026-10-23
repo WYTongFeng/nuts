@@ -14,8 +14,13 @@
     <div class="settings" id="settings" hidden>
       <label>润色风格<select id="style"><option value="natural">自然流畅</option><option value="concise">简洁清晰</option><option value="formal">正式专业</option></select></label>
       <label>改写强度<select id="strength"><option value="light">轻度调整</option><option value="balanced" selected>平衡改写</option><option value="deep">深入改写</option></select></label>
-      <label>生成方式<select id="generation"><option value="compare" selected>3 个候选 + 语义复核</option><option value="single">1 个候选 + 语义复核</option></select></label>
-      <label class="model-select">本地模型<select id="localModel"><option value="">正在检查…</option></select></label>
+      <label>生成方式<select id="generation"><option value="multi" selected>多模型各生成 1 个 + 统一复核</option><option value="compare">3 个候选 + 语义复核</option><option value="single">1 个候选 + 语义复核</option></select></label>
+      <label class="model-select">润色模型 1<select id="localModel"><option value="">正在检查…</option></select></label>
+      <label>润色模型 2（多模型模式）<select id="model2"><option value="">不使用</option></select></label>
+      <label>润色模型 3（多模型模式）<select id="model3"><option value="">不使用</option></select></label>
+      <label>统一复核模型<select id="reviewModel"><option value="">使用润色模型 1</option></select></label>
+      <label>运行配置<select id="profile"><option value="rtx3060">RTX 3060 · 自适应 4K / 8K</option><option value="context8k">固定 8K · 更高显存占用</option></select></label>
+      <p class="small terms">模型依次运行，每份候选独立参考原文；生成结束后统一复核。仅复核通过的候选参与自动推荐。</p>
       <button class="secondary" id="refresh">刷新连接</button>
       <label class="terms">保留术语 <span>用逗号分隔</span><input id="terms" placeholder="例如 Java RMI, BHEL, API" maxlength="1000"></label>
       <label class="terms">你的英文写作样本（可选）<textarea id="voice" rows="3" maxlength="3000" placeholder="粘贴一小段你自己写的英文，用于参考语气；不会把其中的事实写进结果。"></textarea></label>
@@ -27,7 +32,7 @@
         <label class="visually-hidden" for="input">输入英文原文</label>
         <div class="editor-wrap"><div id="highlights" class="editor highlights" aria-hidden="true"></div><textarea id="input" class="editor" spellcheck="false" placeholder="在这里粘贴英文文本。&#10;&#10;一段报告、一篇文章，或一个等待打磨的想法。" maxlength="20000"></textarea></div>
         <div class="editor-foot"><label class="text-button upload">↥ 导入 TXT<input type="file" id="file" accept=".txt,text/plain" class="visually-hidden"></label><span id="count">0 / 2,000 词</span></div>
-        <div class="action-row"><span id="shortcut">⌘ / Ctrl + Enter</span><button id="stop" class="text-button" hidden>当前候选完成后停止</button><button id="run" class="primary">检测文本 <span>↗</span></button></div>
+        <div class="action-row"><span id="shortcut">⌘ / Ctrl + Enter</span><button id="stop" class="text-button" hidden>当前请求结束后停止</button><button id="run" class="primary">检测文本 <span>↗</span></button></div>
       </div>
       <div class="result-panel">
         <div class="panel-head"><h2 id="resultTitle">检测结果</h2><span class="small" id="engine">等待输入</span></div>
