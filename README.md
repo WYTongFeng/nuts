@@ -10,6 +10,7 @@
 
 | 想做什么 | 看哪里 |
 |---|---|
+| 选择 Qwen / Gemma / Llama 等模型，比较外部检测结果 | [RTX 3060 模型与实测指南](MODEL_GUIDE.md) |
 | 第一次在另一台电脑使用 | [完整操作手册](OPERATIONS.md) / [简版安装说明](LOCAL_SETUP.md) |
 | 查看第二版测试结果和限制 | [第二版验证记录](reports/local-v2-validation.md) |
 | 查看检测引擎历史评测 | [检测评测报告](reports/evaluation.md) |
