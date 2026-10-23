@@ -4,6 +4,8 @@
 
 ## 先从这里开始
 
+**Windows 新手请先看：[从零安装与运行教程](WINDOWS_STEP_BY_STEP.md)**。每一步都列出操作、命令与成功标志，包含 Python、Ollama 和模型安装。
+
 **完整操作手册：[OPERATIONS.md](OPERATIONS.md)**，包含 GitHub 下载、Windows / macOS 安装、Ollama、检测、三候选润色、实测记录、保存、更新与故障排查。
 
 | 想做什么 | 看哪里 |

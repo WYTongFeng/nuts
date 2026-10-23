@@ -1,5 +1,7 @@
 # Nuts 第二版：在另一台电脑本地运行
 
+第一次使用 Windows，请先看 [Windows 逐步安装教程](WINDOWS_STEP_BY_STEP.md)。
+
 完整下载、更新与操作流程见 [OPERATIONS.md](OPERATIONS.md)。
 
 中文界面，处理英文文本。提供检测、逐句高亮、自然 / 简洁 / 正式润色、术语保留提示、修改对比、复制、TXT 下载与撤销替换。
