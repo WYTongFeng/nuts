@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 const Core = window.NutsCore;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let experiment = null, selectedCandidate = 0, stopRequested = false;
+let experiment = null, selectedCandidate = 0, stopRequested = false, detectorState = 'unknown';
 let model, mode = 'detect', busy = false, revision = 0, lastDetection = null, lastRewrite = null, undoText = null;
 const sample = 'Online learning has changed how students organise their studies. Recorded lectures let students revisit difficult topics at their own pace. This can be particularly useful when a lecturer introduces several unfamiliar ideas in one session. However, studying from home also requires discipline. Notifications, household responsibilities and unreliable internet connections can interrupt a lesson. Some students find it harder to ask questions online than in a classroom. A useful course should therefore combine flexible materials with regular opportunities for discussion. Clear weekly goals and timely feedback can help students understand what to focus on next.';
 function message(text, error = false) { $('message').textContent = text; $('message').classList.toggle('error', error); }
@@ -17,7 +17,16 @@ function dirty() {
 }
 function resetDisplay() {
   $('empty').hidden = false; $('detection').hidden = true; $('rewritten').hidden = true;
-  $('highlights').textContent = ''; $('engine').textContent = '等待输入';
+  $('highlights').textContent = ''; $('engine').textContent = idleEngine();
+}
+// 检测模式下，没有结果时右上角显示 GPT-2 的加载状态
+function idleEngine() {
+  return mode === 'detect' && {loading:'检测模型加载中…', ready:'GPT-2 已就绪', error:'GPT-2 不可用 · 将使用规则'}[detectorState] || '等待输入';
+}
+async function watchDetector() {
+  try { detectorState = (await api('/api/detector')).state; } catch { return; }
+  if ($('detection').hidden && $('rewritten').hidden) $('engine').textContent = idleEngine();
+  if (detectorState === 'loading') setTimeout(watchDetector, 1000);
 }
 function switchMode(next) {
   if (busy) return;
@@ -80,31 +89,90 @@ function highlights() {
   syncScroll();
 }
 function syncScroll() { $('highlights').scrollTop = $('input').scrollTop; $('highlights').scrollLeft = $('input').scrollLeft; }
+// 分数到了两端时不显示成 0% / 100%，统计模型给不出这么确定的结论
+const pct = p => p < 0.01 ? '<1%' : p > 0.99 ? '>99%' : `${Math.round(p * 100)}%`;
+const REASON_LABELS = {log_ppl:'词语可预测性',log_sent_ppl_std:'句间可预测性变化',top10:'常见预测词占比',burst:'句子长短变化',avg_word_len:'平均词长',log_phrases:'常见 AI 短语',commas_per_sentence:'逗号使用习惯'};
+// 模型特征对应的原始指标：key 是 model.json feature_stats 里的键，lm 表示来自 GPT-2
+const DOC_METRICS = {
+  log_ppl:{key:'ppl', lm:true, fmt:v=>`GPT-2 困惑度 ${v.toFixed(1)}`},
+  log_sent_ppl_std:{key:'sent_ppl_std', lm:true, fmt:v=>`句间困惑度波动 ${v.toFixed(1)}`},
+  top10:{key:'top10', lm:true, fmt:v=>`${Math.round(v * 100)}% 的词在 GPT-2 前 10 名预测里`},
+  burst:{key:'burst', fmt:v=>`句长变化系数 ${v.toFixed(2)}`},
+  avg_word_len:{key:'avg_word_len', fmt:v=>`平均每词 ${v.toFixed(2)} 个字母`},
+  log_phrases:{key:'phrases_per_1k', fmt:v=>`每千词 ${v.toFixed(1)} 处 AI 常用短语`},
+  commas_per_sentence:{key:'commas_per_sentence', fmt:v=>`每句 ${v.toFixed(2)} 个逗号`},
+};
+const STAT_FORMAT = {ppl:v=>v.toFixed(1), sent_ppl_std:v=>v.toFixed(1), top10:v=>`${Math.round(v * 100)}%`, burst:v=>v.toFixed(2),
+  avg_word_len:v=>v.toFixed(2), phrases_per_1k:v=>v.toFixed(1), commas_per_sentence:v=>v.toFixed(2)};
+const SENTENCE_REASONS = {
+  log_ppl:(s, lmS, high) => `GPT-2 困惑度${high ? '高' : '低'}（${lmS.ppl.toFixed(1)}）`,
+  top10:(s, lmS, high) => `可预测的词${high ? '多' : '少'}（${Math.round(lmS.top10 * 100)}% 在前 10 名）`,
+  log_hits:s => `AI 常用短语：${[...new Set(s.hits.map(h => h[0]))].join('、')}`,
+  log_words:(s, lmS, high) => `句子较${high ? '长' : '短'}（${s.words} 词）`,
+  avg_word_len:(s, lmS, high) => `用词偏${high ? '长' : '短'}（平均 ${s.avg_word_len.toFixed(1)} 个字母）`,
+  commas:(s, lmS, high) => `逗号较${high ? '多' : '少'}（${s.commas} 个）`,
+};
+// 每个特征把结果往哪边推、推了多少：系数 × 标准化后的数值
+const pushes = (m, values) => m.features.map((f, i) => ({f, x:values[f], push:m.coef[i] * ((values[f] ?? m.mean[i]) - m.mean[i]) / m.scale[i], mean:m.mean[i]}));
+function docReasons(m, values, rule, lm) {
+  const stats = model.feature_stats || {};
+  return pushes(m, values).sort((a,b) => Math.abs(b.push) - Math.abs(a.push)).slice(0, 4).map(({f, push}) => {
+    const spec = DOC_METRICS[f], raw = spec && (spec.lm ? lm?.metrics?.[spec.key] : rule[spec.key]);
+    const parts = [typeof raw === 'number' && isFinite(raw) ? spec.fmt(raw) : '这段文字缺少这项数据'];
+    const st = spec && stats[spec.key];
+    if (st) parts.push(`人写中位数 ${STAT_FORMAT[spec.key](st.human)}，AI 中位数 ${STAT_FORMAT[spec.key](st.ai)}`);
+    if (f === 'log_phrases') {
+      const hits = [...new Set(rule.sentence_details.flatMap(s => s.hits.map(h => h[0])))];
+      if (hits.length) parts.push(`出现：${hits.slice(0, 5).join('、')}${hits.length > 5 ? ' 等' : ''}`);
+    }
+    return {label:REASON_LABELS[f] || f, push, detail:parts.join(' · ')};
+  });
+}
+function sentenceReasons(sm, s, lmS, values) {
+  return pushes(sm, values)
+    .filter(({f, x, push}) => x != null && SENTENCE_REASONS[f] && push > 0.25 && (f !== 'log_hits' || s.hits.length))
+    .sort((a,b) => b.push - a.push).slice(0, 3)
+    .map(({f, x, mean}) => SENTENCE_REASONS[f](s, lmS, x > mean));
+}
 function showDetection(text, rule, lm) {
   const variant = lm ? 'full' : 'rules', m = model.doc[variant];
   const values = Core.docValues(rule, lm?.metrics), p = Core.probability(m, values);
   const verdict = Core.docVerdict(m, p, rule.words);
   const sm = model.sentence[variant];
   const sentences = rule.sentence_details.map((s, i) => {
-    const prob = Core.probability(sm, Core.sentenceValues(s, lm?.sentences[i]));
-    return {...s, prob, level:s.words >= 3 ? Core.sentenceLevel(sm, prob) : 0};
+    const lmS = lm?.sentences[i], sv = Core.sentenceValues(s, lmS), prob = Core.probability(sm, sv);
+    return {...s, prob, level:s.words >= 3 ? Core.sentenceLevel(sm, prob) : 0, reasons:sentenceReasons(sm, s, lmS, sv)};
   });
   lastDetection = {text, sentences};
   $('empty').hidden = true; $('detection').hidden = false; $('rewritten').hidden = true;
   $('detection').classList.remove('stale');
-  $('score').textContent = `${Math.round(p * 100)}%`;
+  $('score').textContent = pct(p);
   $('ring').style.setProperty('--score', `${p * 100}%`);
   $('verdict').textContent = {likely:'很可能是 AI 生成',possible:'可能有 AI 成分',unlikely:'不太像 AI 生成'}[verdict];
   $('engine').textContent = lm ? 'GPT-2 + 规则' : '仅规则 · 降级模式';
   $('verdictNote').textContent = '这是统计模型的参考评分，不能据此确认文字来源。';
-  const labels = {log_ppl:'词语可预测性',log_sent_ppl_std:'句间可预测性变化',top10:'常见预测词占比',burst:'句子长短变化',avg_word_len:'平均词长',log_phrases:'常见 AI 短语',commas_per_sentence:'逗号使用习惯'};
-  const contributions = m.features.map((f,i) => ({label:labels[f],value:m.coef[i] * ((values[f] ?? m.mean[i]) - m.mean[i]) / m.scale[i]})).sort((a,b) => Math.abs(b.value)-Math.abs(a.value)).slice(0,4);
-  $('reasons').innerHTML = contributions.map(c => `<li><span class="reason-dot ${c.value < 0 ? 'human' : ''}">●</span>${esc(c.label)}：${c.value >= 0 ? '偏向 AI 特征' : '偏向人类写作特征'}</li>`).join('');
+  $('reasons').replaceChildren(...docReasons(m, values, rule, lm).map(r => {
+    const li = document.createElement('li'), dot = document.createElement('span'), body = document.createElement('div');
+    const title = document.createElement('div'), detail = document.createElement('div');
+    li.className = 'reason'; dot.className = 'reason-dot' + (r.push < 0 ? ' human' : ''); dot.textContent = '●';
+    title.className = 'reason-title'; title.textContent = `${r.label}：${r.push >= 0 ? '偏向 AI 特征' : '偏向人类写作特征'}`;
+    detail.className = 'reason-detail'; detail.textContent = r.detail;
+    body.append(title, detail); li.append(dot, body);
+    return li;
+  }));
   const flagged = sentences.filter(s => s.level).sort((a,b) => b.prob-a.prob).slice(0,5);
   $('sentences').replaceChildren();
   for (const s of flagged) {
-    const button = document.createElement('button'); button.className = 'sentence';
-    button.textContent = `${Math.round(s.prob*100)}% · ${text.slice(s.start,s.end)}`;
+    const button = document.createElement('button'), head = document.createElement('span'), body = document.createElement('span');
+    button.className = 'sentence';
+    head.className = 'sentence-score'; head.textContent = `${pct(s.prob)} · ${s.level === 2 ? '很像 AI' : '有点像'}`;
+    body.className = 'sentence-text'; body.textContent = text.slice(s.start, s.end);
+    button.append(head, body);
+    if (s.reasons.length) {
+      const why = document.createElement('span');
+      why.className = 'sentence-why'; why.textContent = '原因：' + s.reasons.join(' · ');
+      button.append(why);
+    }
     button.onclick = () => { if (text !== $('input').value) return; $('input').focus(); $('input').setSelectionRange(s.start,s.end); $('input').scrollTop = s.start/Math.max(text.length,1)*$('input').scrollHeight; syncScroll(); };
     $('sentences').append(button);
   }
@@ -208,7 +276,7 @@ async function run() {
   for (const id of ['run','detectTab','rewriteTab','apply','undo']) $(id).disabled=true;
   document.querySelectorAll('#settings select, #settings input, #settings textarea, #settings button').forEach(el=>el.disabled=true);
   $('run').textContent='处理中…';
-  message(mode==='detect'?'正在检测。首次使用 GPT-2 需要下载模型，可能需要几分钟。':'本地模型正在润色，可能需要几分钟，请保持页面打开。');
+  message(mode==='detect'?(detectorState==='ready'?'正在检测…':detectorState==='loading'?'正在检测，GPT-2 还在加载，完成后会自动继续。':'正在检测。首次使用 GPT-2 需要下载模型，可能需要几分钟。'):'本地模型正在润色，可能需要几分钟，请保持页面打开。');
   try {
     if (mode==='detect') {
       const rule=Core.analyze(text,model.phrases);
@@ -294,3 +362,4 @@ $('undo').onclick=()=>{if(busy||undoText===null)return;$('input').value=undoText
 $('theme').onclick=()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';};
 (async()=>{try{model=await api('/model.json');const ev=model.evaluation.full;$('accuracy').textContent=`已有 RAID 测试集：检出率 ${(ev.possible_tpr*100).toFixed(1)}%，误判率 ${(ev.possible_fpr*100).toFixed(1)}%；非母语论文段落误判率 ${(ev.esl_possible_fpr*100).toFixed(1)}%。均按“可能”阈值统计。`;}catch{message('无法加载检测模型，请通过本地启动脚本打开。',true);$('accuracy').textContent='评测数据未加载。';}})();
 refreshModels();
+watchDetector();

@@ -52,6 +52,17 @@ class ServerTest(unittest.TestCase):
     def test_empty_text(self):
         self.assertEqual(self.post("  "), {"metrics": {}, "sentences": []})
 
+    def test_detector_status(self):
+        with urllib.request.urlopen(self.base + "/api/detector") as res:
+            self.assertIn(json.load(res)["state"], {"idle", "loading", "ready", "error"})
+
+    def test_preload_marks_detector_ready(self):
+        server.DETECTOR["state"] = "loading"
+        server.DETECTOR_READY.clear()
+        server.preload_detector()
+        self.assertEqual(server.DETECTOR["state"], "ready")
+        self.assertTrue(server.DETECTOR_READY.is_set())
+
     def test_unknown_path(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             urllib.request.urlopen(self.base + "/secret.txt")

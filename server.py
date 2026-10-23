@@ -1,4 +1,4 @@
-"""Nuts local web app. Run python server.py [--no-browser]."""
+"""Nuts local web app. Run python server.py [--no-browser] [--no-preload]."""
 import json
 import sys
 import threading
@@ -15,6 +15,23 @@ STATIC = { '/' + name: (name, mime) for name, mime in [
     ('nuts-core.js', 'text/javascript'), ('app.js', 'text/javascript'),
     ('app.css', 'text/css'), ('model.json', 'application/json')] }
 MODEL_LOCK = threading.Lock()
+# GPT-2 后台预加载：idle（没预加载）/ loading / ready / error
+DETECTOR = {'state': 'idle'}
+DETECTOR_READY = threading.Event()
+DETECTOR_READY.set()
+
+
+def preload_detector():
+    """启动时在后台加载 GPT-2，第一次检测就不用等；加载期间的检测请求会等它完成。"""
+    try:
+        with MODEL_LOCK:
+            import perplexity
+            perplexity.load()
+        DETECTOR['state'] = 'ready'
+    except Exception:
+        DETECTOR['state'] = 'error'
+    finally:
+        DETECTOR_READY.set()
 
 
 def score(text):
@@ -28,6 +45,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, 'text/html; charset=utf-8', SHELL.format((ROOT / 'analyzer.html').read_text(encoding='utf-8')).encode())
         elif self.path == '/api/status':
             self._json(200, rewriting.status())
+        elif self.path == '/api/detector':
+            self._json(200, DETECTOR)
         elif self.path in STATIC:
             name, mime = STATIC[self.path]
             self._send(200, mime + '; charset=utf-8', (ROOT / name).read_bytes())
@@ -76,6 +95,9 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, TypeError) as e:
             self._json(400, {'error': str(e)})
             return
+        if self.path == '/api/score':
+            # 预加载还没完成时先等它，而不是回“正在处理其他请求”
+            DETECTOR_READY.wait(timeout=600)
         if not MODEL_LOCK.acquire(blocking=False):
             self._json(409, {'error': '模型正在处理其他请求，请稍后重试。'})
             return
@@ -83,6 +105,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == '/api/score':
                 rewriting.release()
                 overall, sentences = score(text)
+                DETECTOR['state'] = 'ready'
                 result = {'metrics': overall, 'sentences': sentences}
             elif self.path == '/api/release':
                 rewriting.release()
@@ -132,6 +155,10 @@ def start_server():
 
 def main():
     server, port = start_server()
+    if '--no-preload' not in sys.argv:
+        DETECTOR['state'] = 'loading'
+        DETECTOR_READY.clear()
+        threading.Thread(target=preload_detector, daemon=True).start()
     url = f'http://localhost:{port}'
     print(f'Nuts 已启动：{url}（Ctrl+C 停止）', flush=True)
     if '--no-browser' not in sys.argv:
