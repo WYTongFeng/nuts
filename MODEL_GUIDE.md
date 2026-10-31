@@ -33,19 +33,20 @@ nvidia-smi
 
 | 模型标签 | 开发方 | 下载约 | 建议用途与限制 | 安装优先级 |
 |---|---|---:|---|---|
-| [qwen3:4b](https://ollama.com/library/qwen3:4b) | Alibaba / Qwen | 2.5GB | 日常润色主力候选；需检查思考模式，避免额外等待 | 第一批 |
-| [gemma3:4b](https://ollama.com/library/gemma3:4b) | Google | 3.4GB | 非 Qwen 主力候选；和 Qwen 对同一原文分别改写 | 第一批 |
+| [gemma3:4b](https://ollama.com/library/gemma3:4b) | Google | 3.4GB | 日常润色主力；实测在 6GB 显存上 100% GPU 运行。复核自身候选时偏严 | 第一批 |
 | [qwen2.5:7b](https://ollama.com/library/qwen2.5:7b) | Alibaba / Qwen | 4.7GB | 保留原有基线，可尝试润色或原意复核；显存余量较紧 | 第一批 |
 | [llama3.2:3b](https://ollama.com/library/llama3.2:3b) | Meta | 2.0GB | 轻量候选，先试短文和简单修改，再检查复杂论述表现 | 第二批 |
 | [phi4-mini](https://ollama.com/library/phi4-mini) | Microsoft | 2.5GB | 尝试做第二位复核者，也可参与润色比较；不视为可靠裁判 | 第二批 |
 | [mistral:7b](https://ollama.com/library/mistral:7b) | Mistral AI | 4.4GB | 较早的 7B 英文改写对照；检查长文占用和速度 | 第二批 |
-| [llama3.1:8b](https://ollama.com/library/llama3.1:8b) | Meta | 4.9GB | 愿意多等时测试的较大候选；6GB 显存下需留意 CPU 分担 | 第三批 |
+| [llama3.1:8b](https://ollama.com/library/llama3.1:8b) | Meta | 4.9GB | 愿意多等时测试的较大候选；实测能用，6GB 显存下约 25% 在 CPU 上运行 | 第三批 |
 | [qwen3.5:4b](https://ollama.com/library/qwen3.5:4b) | Alibaba / Qwen | 3.3GB | 新候选，使用较新的 Ollama，验证思考设置及结构化复核兼容性 | 第三批 |
 | [qwen2.5:1.5b](https://ollama.com/library/qwen2.5:1.5b) | Alibaba / Qwen | 986MB | 安装排错和低资源备用；不作为复杂长文的首选 | 可选备用 |
 
 Qwen3.5 页面同时展示不同运行后端的文件；上表取 Windows 使用的 llama.cpp / Q4_K_M 版本，不能把 Apple MLX 文件大小混用。
 
-**建议先用 Qwen3 4B + Gemma3 4B + Qwen2.5 7B。** 先找到适合自己文章的组合，再扩充其他模型。下载全部模型不会自动提升效果；每个模型是否保留，由实际质量、耗时和外部测量共同决定。
+**`qwen3:4b` 已从清单移除。** 2026-10-31 在 Ollama 0.40.13、RTX 3060 Laptop 6GB 上实测：`ollama show` 显示它的思考模式只能开启（`thinking.values` 只有 `true`），Nuts 无法关闭；手动传 `think: false` 时它仍把推理写进回答，用完输出预算，润色每次都报“模型未返回完整文本”。
+
+**建议先用 Gemma3 4B + Qwen2.5 7B**，需要多模型对比时再从第二批加一个生成模型。 先找到适合自己文章的组合，再扩充其他模型。下载全部模型不会自动提升效果；每个模型是否保留，由实际质量、耗时和外部测量共同决定。
 
 ## 4. Windows 安装命令
 
@@ -54,10 +55,11 @@ Qwen3.5 页面同时展示不同运行后端的文件；上表取 Windows 使用
 ### 第一批：推荐组合
 
 ```powershell
-ollama pull qwen3:4b
 ollama pull gemma3:4b
 ollama pull qwen2.5:7b
 ```
+
+下载中途报 `unexpected EOF` 或 `timed out waiting for server to start`，通常是 Ollama 正在后台自动更新并暂停了服务。等更新完成、Ollama 回到系统托盘后重新执行同一条命令，已下载部分会继续使用。
 
 ### 第二批：增加不同模型家族
 
@@ -75,7 +77,7 @@ ollama pull qwen3.5:4b
 ollama pull qwen2.5:1.5b
 ```
 
-全部标示大小相加约 29GB；实际磁盘占用取决于共享文件和版本，建议至少预留 40GB 可用空间以容纳下载和更新。Python、网站依赖和检测模型还需要额外空间。
+全部标示大小相加约 27GB；实际磁盘占用取决于共享文件和版本，建议至少预留 40GB 可用空间以容纳下载和更新。Python、网站依赖和检测模型还需要额外空间。
 
 查看已安装模型：
 
@@ -104,7 +106,7 @@ ollama stop gemma3:4b
 自动多模型操作：
 
 1. 选择“多模型各生成 1 个 + 统一复核”。
-2. 润色模型 1 选 Qwen3 4B，模型 2 选 Gemma3 4B，模型 3 可不使用。
+2. 润色模型 1 选 Gemma3 4B，模型 2 选第二批的一个模型（如 Llama3.2 3B），模型 3 可不使用。电脑上装有 `qwen3:4b` 时网页会默认选中它，需要手动改选。
 3. 统一复核模型选 Qwen2.5 7B；运行配置保留 RTX 3060 自适应。
 4. 点击开始，程序依次生成，再统一复核。重复选择的模型会合并。
 5. 对照各候选的模型、检查结果和耗时；导出实验记录后再进行下一轮。
@@ -115,8 +117,8 @@ ollama stop gemma3:4b
 
 | 模式 | 生成候选 | 复核 | 使用场景 |
 |---|---|---|---|
-| 快速 | Qwen3 4B 或 Gemma3 4B，选一个 | 同模型复核 + 人工检查 | 日常短文 |
-| 对比 | Qwen3 4B、Gemma3 4B 各自读取原文 | Qwen2.5 7B 或 Phi-4 Mini | 比较表达、内容保留和成绩 |
+| 快速 | Gemma3 4B | Qwen2.5 7B 复核 + 人工检查；Gemma3 复核自身偏严 | 日常短文 |
+| 对比 | Gemma3 4B、Llama3.2 3B 各自读取原文 | Qwen2.5 7B 或 Phi-4 Mini | 比较表达、内容保留和成绩 |
 | 扩展实验 | 再加入 Llama、Mistral、Qwen3.5 | 对合格候选统一复核 | 找适合自己文体的模型 |
 
 每个候选都独立读取原文。模型按批次串行工作，生成阶段结束后再切换复核模型，减少反复加载。不同模型交叉复核提供另一种判断，但仍可能共同漏错。
